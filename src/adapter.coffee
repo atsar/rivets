@@ -1,5 +1,5 @@
 # The default `.` adapter thats comes with Rivets.js. Allows subscribing to
-# properties on POJSOs, implemented in ES5 natives using
+# properties on plain objects, implemented in ES5 natives using
 # `Object.defineProperty`.
 Rivets.public.adapters['.'] =
   id: '_rv'
@@ -9,13 +9,14 @@ Rivets.public.adapters['.'] =
   weakReference: (obj) ->
     unless obj.hasOwnProperty @id
       id = @counter++
-
-      @weakmap[id] =
-        callbacks: {}
-
       Object.defineProperty obj, @id, value: id
 
-    @weakmap[obj[@id]]
+    @weakmap[obj[@id]] or= callbacks: {}
+
+  cleanupWeakReference: (ref, id) ->
+    unless Object.keys(ref.callbacks).length
+      unless ref.pointers and Object.keys(ref.pointers).length
+        delete @weakmap[id]
 
   stubFunction: (obj, fn) ->
     original = obj[fn]
@@ -45,27 +46,39 @@ Rivets.public.adapters['.'] =
         map.pointers[ref].push keypath
 
   unobserveMutations: (obj, ref, keypath) ->
-    if Array.isArray obj and obj[@id]?
-      if keypaths = @weakReference(obj).pointers?[ref]
-        idx = keypaths.indexOf(keypath)
-        if idx >= 0
-          keypaths.splice idx, 1
+    if Array.isArray(obj) and obj[@id]?
+      if map = @weakmap[obj[@id]]
+        if pointers = map.pointers[ref]
+          if (idx = pointers.indexOf(keypath)) >= 0
+            pointers.splice idx, 1
+
+          delete map.pointers[ref] unless pointers.length
+          @cleanupWeakReference map, obj[@id]
 
   observe: (obj, keypath, callback) ->
     callbacks = @weakReference(obj).callbacks
 
     unless callbacks[keypath]?
       callbacks[keypath] = []
-      value = obj[keypath]
+      desc = Object.getOwnPropertyDescriptor obj, keypath
 
-      Object.defineProperty obj, keypath,
-        enumerable: true
-        get: -> value
-        set: (newValue) =>
-          if newValue isnt value
-            value = newValue
-            callback() for callback in callbacks[keypath].slice() when callback in callbacks[keypath]
-            @observeMutations newValue, obj[@id], keypath
+      unless desc?.get or desc?.set
+        value = obj[keypath]
+
+        Object.defineProperty obj, keypath,
+          enumerable: true
+          get: -> value
+          set: (newValue) =>
+            if newValue isnt value
+              @unobserveMutations value, obj[@id], keypath
+              value = newValue
+
+              if map = @weakmap[obj[@id]]
+                callbacks = map.callbacks
+
+                if callbacks[keypath]
+                  cb() for cb in callbacks[keypath]
+                @observeMutations newValue, obj[@id], keypath
 
     unless callback in callbacks[keypath]
       callbacks[keypath].push callback
@@ -73,12 +86,16 @@ Rivets.public.adapters['.'] =
     @observeMutations obj[keypath], obj[@id], keypath
 
   unobserve: (obj, keypath, callback) ->
-    callbacks = @weakmap[obj[@id]].callbacks[keypath]
+    if map = @weakmap[obj[@id]]
+      if callbacks = map.callbacks[keypath]
+        if (idx = callbacks.indexOf(callback)) >= 0
+          callbacks.splice idx, 1
 
-    idx = callbacks.indexOf(callback);
-    if idx >= 0
-      callbacks.splice idx, 1
-    @unobserveMutations obj[keypath], obj[@id], keypath
+          unless callbacks.length
+            delete map.callbacks[keypath]
+
+        @unobserveMutations obj[keypath], obj[@id], keypath
+        @cleanupWeakReference map, obj[@id]
 
   get: (obj, keypath) ->
     obj[keypath]

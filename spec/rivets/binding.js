@@ -1,7 +1,8 @@
 describe('Rivets.Binding', function() {
-  var model, el, view, binding, opts
+  var model, el, view, binding, opts, originalPrefix
 
   beforeEach(function() {
+    originalPrefix = rivets.prefix
     rivets.prefix = 'data'
     adapter = rivets.adapters['.']
 
@@ -13,8 +14,38 @@ describe('Rivets.Binding', function() {
     model = binding.model
   })
 
+  afterEach(function() {
+    rivets.prefix = originalPrefix
+  })
+
   it('gets assigned the proper binder routine matching the identifier', function() {
     binding.binder.routine.should.equal(rivets.binders.text)
+  })
+
+  describe('with formatters', function() {
+    it('register all formatters', function() {
+
+      valueInput = document.createElement('input')
+      valueInput.setAttribute('type','text')
+      valueInput.setAttribute('data-value', "obj.name | awesome | radical | totally")
+
+      view = rivets.bind(valueInput, {obj: { name: 'nothing' }})
+      binding = view.bindings[0]
+
+      binding.formatters.should.be.eql(['awesome', 'radical', 'totally'])
+    })
+
+    it('allows arguments with pipes', function() {
+
+      valueInput = document.createElement('input')
+      valueInput.setAttribute('type','text')
+      valueInput.setAttribute('data-value', "obj.name | awesome | totally 'arg | with || pipes'")
+
+      view = rivets.bind(valueInput, {obj: { name: 'nothing' }})
+      binding = view.bindings[0]
+
+      binding.formatters.should.be.eql(['awesome', "totally 'arg | with || pipes'"])
+    })
   })
 
   describe('bind()', function() {
@@ -59,13 +90,26 @@ describe('Rivets.Binding', function() {
   })
 
   describe('unbind()', function() {
-    it("calls the binder's unbind method if one exists", function() {
-      binding.unbind.should.not.throw()
+    describe('without a binder.unbind defined', function() {
+      it('should not throw an error', function() {
+        binding.unbind.should.not.throw()
+      })
+    })
 
-      binding.binder.unbind = function(){}
-      sinon.spy(binding.binder, 'unbind')
-      binding.unbind()
-      binding.binder.unbind.called.should.be.true
+    describe('with a binder.unbind defined', function() {
+      beforeEach(function() {
+        binding.binder.unbind = function(){}
+      })
+
+      it('should not throw an error', function() {
+        binding.unbind.should.not.throw()
+      })
+
+      it("calls the binder's unbind method", function() {
+        sinon.spy(binding.binder, 'unbind')
+        binding.unbind()
+        binding.binder.unbind.called.should.be.true
+      })
     })
   })
 
@@ -84,12 +128,28 @@ describe('Rivets.Binding', function() {
       binding.set('sweater')
       binding.binder.routine.calledWith(el, 'awesome sweater').should.be.true
     })
+  })
 
-    it('calls methods with the object as context', function() {
+  describe('functions in bindings', function() {
+    it('does not call methods by default', function() {
+      sinon.spy(binding.binder, 'routine')
+      var fn = function() {};
+      binding.set(fn)
+      binding.binder.routine.calledWith(el, fn).should.be.true
+    })
+
+    it('does call methods with model if backward compatibility is set', function() {
+      rivets.configure({
+        executeFunctions:true
+      })
       binding.model = {foo: 'bar'}
       sinon.spy(binding.binder, 'routine')
       binding.set(function() { return this.foo })
       binding.binder.routine.calledWith(el, binding.model.foo).should.be.true
+      // Back to default !!
+      rivets.configure({
+        executeFunctions:false
+      })
     })
   })
 
@@ -258,6 +318,49 @@ describe('Rivets.Binding', function() {
       it('applies the formatter with arguments', function() {
         binding.formattedValue('jacket').should.equal('super awesome jacket')
       })
+    })
+
+    describe('with a formatter string with pipes in argument', function() {
+      beforeEach(function () {
+
+        view.formatters.totally = function (value, prefix) {
+          return prefix + ' totally ' + value
+        }
+
+        binding.formatters.push("totally 'arg | with || pipes'")
+      })
+
+      it('applies the formatter with arguments with pipes', function () {
+        binding.formattedValue('jacket').should.equal('arg | with || pipes totally jacket')
+      })
+    })
+  })
+
+  describe('getValue()', function() {
+    it('should use binder.getValue() if present', function() {
+      binding.binder.getValue = function(el) {
+        return 'foo'
+      }
+
+      binding.getValue(el).should.equal('foo')
+    })
+
+    it('binder.getValue() should have access to passed element', function() {
+      binding.binder.getValue = function(el) {
+        return el.dataset.foo
+      }
+
+      el.dataset.foo = 'bar'
+      binding.getValue(el).should.equal('bar')
+    })
+
+    it('binder.getValue() should have access to binding', function() {
+      binding.binder.getValue = function(el) {
+        return this.foo
+      }
+
+      binding.foo = 'bar'
+      binding.getValue(el).should.equal('bar')
     })
   })
 })

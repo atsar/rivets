@@ -1,10 +1,13 @@
 pkg    = require('./package.json')
+argv   = require('minimist')(process.argv.slice(2))
+
 gulp   = require('gulp')
 util   = require('gulp-util')
 coffee = require('gulp-coffee')
 header = require('gulp-header')
 concat = require('gulp-concat')
 uglify = require('gulp-uglify')
+bump   = require('gulp-bump')
 mocha  = require('gulp-mocha-phantomjs')
 
 source = [
@@ -15,8 +18,15 @@ source = [
   'src/view.coffee',
   'src/bindings.coffee',
   'src/binders.coffee',
+  'src/formatters.coffee',
   'src/adapter.coffee',
   'src/export.coffee'
+]
+
+manifests = [
+  './package.json',
+  './bower.json',
+  './component.json'
 ]
 
 banner = function(bundled) {
@@ -55,4 +65,10 @@ gulp.task('build', function() {
 gulp.task('spec', function() {
   gulp.src('spec/runner.html')
     .pipe(mocha({reporter: 'dot'}))
+})
+
+gulp.task('bump', function() {
+  gulp.src(manifests)
+    .pipe(bump({type: argv.t, version: argv.v}))
+    .pipe(gulp.dest('./'))
 })

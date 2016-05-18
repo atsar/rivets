@@ -1,7 +1,9 @@
 describe('Functional', function() {
-  var data, bindData, el, input
+  var data, bindData, el, input, originalPrefix
 
   beforeEach(function() {
+    originalPrefix = rivets.prefix;
+    rivets.prefix = 'data';
     adapter = {
       observe: function(obj, keypath, callback) {
         obj.on(keypath, callback)
@@ -34,6 +36,10 @@ describe('Functional', function() {
     input.setAttribute('type', 'text')
   })
 
+  afterEach(function() {
+    rivets.prefix = originalPrefix
+  })
+
   describe('Adapter', function() {
     it('should read the initial value', function() {
       sinon.spy(data, 'get')
@@ -63,7 +69,6 @@ describe('Functional', function() {
       it('should set the text content of the element', function() {
         el.setAttribute('data-text', 'data:foo')
         rivets.bind(el, bindData)
-        debugger
         el.textContent.should.equal(data.get('foo'))
       })
 
@@ -107,6 +112,54 @@ describe('Functional', function() {
         rivets.bind([el, input], bindData)
         el.textContent.should.equal(data.get('foo'))
         input.value.should.equal(data.get('foo'))
+      })
+    })
+
+    describe('Priority', function() {
+      beforeEach(function() {
+        rivets.binders.a = {bind: function(){}}
+        rivets.binders.b = {bind: function(){}}
+
+        sinon.spy(rivets.binders.a, 'bind')
+        sinon.spy(rivets.binders.b, 'bind')
+
+        el.setAttribute('data-a', 'data:foo')
+        el.setAttribute('data-b', 'data:foo')
+      })
+
+      describe('a:10, b:30', function() {
+        beforeEach(function() {
+          rivets.binders.a.priority = 10
+          rivets.binders.b.priority = 30
+          rivets.bind(el, bindData)
+        })
+
+        it('should bind b before a', function() {
+          rivets.binders.b.bind.calledBefore(rivets.binders.a.bind).should.be.true
+        })
+      })
+
+      describe('a:5, b:2', function() {
+        beforeEach(function() {
+          rivets.binders.a.priority = 5
+          rivets.binders.b.priority = 2
+          rivets.bind(el, bindData)
+        })
+
+        it('should bind a before b', function() {
+          rivets.binders.a.bind.calledBefore(rivets.binders.b.bind).should.be.true
+        })
+      })
+
+      describe('a:undefined, b:1', function() {
+        beforeEach(function() {
+          rivets.binders.b.priority = 1
+          rivets.bind(el, bindData)
+        })
+
+        it('should bind b before a', function() {
+          rivets.binders.b.bind.calledBefore(rivets.binders.a.bind).should.be.true
+        })
       })
     })
 
@@ -180,6 +233,26 @@ describe('Functional', function() {
 
       it('should allow binding to the iterated element index', function() {
         listItem.setAttribute('data-index', 'index')
+        rivets.bind(el, bindData)
+        el.getElementsByTagName('li')[0].getAttribute('index').should.equal('0')
+        el.getElementsByTagName('li')[1].getAttribute('index').should.equal('1')
+      })
+
+      it('should allow binding to the iterated element index by using the %item% syntax', function() {
+        listItem.setAttribute('data-index', '%item%')
+        rivets.bind(el, bindData)
+        el.getElementsByTagName('li')[0].getAttribute('index').should.equal('0')
+        el.getElementsByTagName('li')[1].getAttribute('index').should.equal('1')
+      })
+
+      it('should allow the developer to configure the index attribute available in the iteration', function() {
+        rivets.configure({
+          iterationAlias : function(modelName) {
+            return modelName + 'Index';
+          }
+        });
+
+        listItem.setAttribute('data-index', 'itemIndex')
         rivets.bind(el, bindData)
         el.getElementsByTagName('li')[0].getAttribute('index').should.equal('0')
         el.getElementsByTagName('li')[1].getAttribute('index').should.equal('1')

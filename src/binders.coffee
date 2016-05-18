@@ -31,10 +31,14 @@ Rivets.public.binders.disabled = (el, value) ->
 # property when the input is checked or unchecked (two-way binder).
 Rivets.public.binders.checked =
   publishes: true
+  priority: 2000
+
   bind: (el) ->
     Rivets.Util.bindEvent el, 'change', @publish
+
   unbind: (el) ->
     Rivets.Util.unbindEvent el, 'change', @publish
+
   routine: (el, value) ->
     if el.type is 'radio'
       el.checked = el.value?.toString() is value?.toString()
@@ -46,10 +50,14 @@ Rivets.public.binders.checked =
 # unchecked (two-way binder).
 Rivets.public.binders.unchecked =
   publishes: true
+  priority: 2000
+
   bind: (el) ->
     Rivets.Util.bindEvent el, 'change', @publish
+
   unbind: (el) ->
     Rivets.Util.unbindEvent el, 'change', @publish
+
   routine: (el, value) ->
     if el.type is 'radio'
       el.checked = el.value?.toString() isnt value?.toString()
@@ -60,16 +68,21 @@ Rivets.public.binders.unchecked =
 # (two-way binder).
 Rivets.public.binders.value =
   publishes: true
+  priority: 3000
 
   bind: (el) ->
-    @event = if el.tagName is 'SELECT' then 'change' else 'input'
-    Rivets.Util.bindEvent el, @event, @publish
+    unless el.tagName is 'INPUT' and el.type is 'radio'
+      @event = if el.tagName is 'SELECT' then 'change' else 'input'
+      Rivets.Util.bindEvent el, @event, @publish
 
   unbind: (el) ->
-    Rivets.Util.unbindEvent el, @event, @publish
+    unless el.tagName is 'INPUT' and el.type is 'radio'
+      Rivets.Util.unbindEvent el, @event, @publish
 
   routine: (el, value) ->
-    if window.jQuery?
+    if el.tagName is 'INPUT' and el.type is 'radio'
+      el.setAttribute 'value', value
+    else if window.jQuery?
       el = jQuery el
 
       if value?.toString() isnt el.val()?.toString()
@@ -83,6 +96,7 @@ Rivets.public.binders.value =
 # Inserts and binds the element and it's child nodes into the DOM when true.
 Rivets.public.binders.if =
   block: true
+  priority: 4000
 
   bind: (el) ->
     unless @marker?
@@ -97,7 +111,9 @@ Rivets.public.binders.if =
       el.parentNode.removeChild el
 
   unbind: ->
-    @nested?.unbind()
+    if @nested
+      @nested.unbind()
+      @bound = false
 
   routine: (el, value) ->
     if !!value is not @bound
@@ -120,6 +136,7 @@ Rivets.public.binders.if =
 # (negated version of `if` binder).
 Rivets.public.binders.unless =
   block: true
+  priority: 4000
 
   bind: (el) ->
     Rivets.public.binders.if.bind.call @, el
@@ -136,6 +153,7 @@ Rivets.public.binders.unless =
 # Binds an event handler on the element.
 Rivets.public.binders['on-*'] =
   function: true
+  priority: 1000
 
   unbind: (el) ->
     Rivets.Util.unbindEvent el, @args[0], @handler if @handler
@@ -147,6 +165,7 @@ Rivets.public.binders['on-*'] =
 # Appends bound instances of the element in place for each item in the array.
 Rivets.public.binders['each-*'] =
   block: true
+  priority: 4000
 
   bind: (el) ->
     unless @marker?
@@ -164,6 +183,7 @@ Rivets.public.binders['each-*'] =
 
   unbind: (el) ->
     view.unbind() for view in @iterated if @iterated?
+    return
 
   routine: (el, collection) ->
     modelName = @args[0]
@@ -177,6 +197,7 @@ Rivets.public.binders['each-*'] =
 
     for model, index in collection
       data = {index}
+      data[Rivets.public.iterationAlias modelName] = index
       data[modelName] = model
 
       if not @iterated[index]?
@@ -204,6 +225,7 @@ Rivets.public.binders['each-*'] =
       for binding in @view.bindings
         if binding.el is @marker.parentNode and binding.type is 'value'
           binding.sync()
+    return
 
   update: (models) ->
     data = {}
@@ -212,6 +234,7 @@ Rivets.public.binders['each-*'] =
       data[key] = model unless key is @args[0]
 
     view.update data for view in @iterated
+    return
 
 # Adds or removes the class from the element when value is true or false.
 Rivets.public.binders['class-*'] = (el, value) ->

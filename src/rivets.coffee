@@ -5,7 +5,8 @@ Rivets =
     'templateDelimiters'
     'rootInterface'
     'preloadData'
-    'handler'
+    'handler',
+    'executeFunctions'
   ]
 
   extensions: [
@@ -39,7 +40,14 @@ Rivets =
     rootInterface: '.'
 
     # Preload data by default.
-    preloadData: true
+    preloadData: true,
+
+    # Execute functions in bindings. Defaultis false since rivets 0.9. Set to true to be backward compatible with rivets 0.8.
+    executeFunctions: false,
+
+    # Alias for index in rv-each binder
+    iterationAlias : (modelName) ->
+      return '%' + modelName + '%'
 
     # Default event handler.
     handler: (context, ev, binding) ->
@@ -56,9 +64,26 @@ Rivets =
 
       return
 
-    # Binds a set of model objects to a parent DOM element and returns a
-    # `Rivets.View` instance.
+    # Binds some data to a template / element. Returns a Rivets.View instance.
     bind: (el, models = {}, options = {}) ->
       view = new Rivets.View(el, models, options)
+      view.bind()
+      view
+
+    # Initializes a new instance of a component on the specified element and
+    # returns a Rivets.View instance.
+    init: (component, el, data = {}) ->
+      el ?= document.createElement 'div'
+      component = Rivets.public.components[component]
+      template = component.template.call @, el
+      if template instanceof HTMLElement
+        while el.firstChild
+          el.removeChild(el.firstChild)
+        el.appendChild(template)
+      else
+        el.innerHTML = template
+      scope = component.initialize.call @, el, data
+
+      view = new Rivets.View(el, scope)
       view.bind()
       view

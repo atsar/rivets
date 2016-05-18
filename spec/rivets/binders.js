@@ -56,20 +56,20 @@ describe("Rivets.binders", function() {
 
     it("reflects changes to the model into the DOM", function() {
       var view = rivets.bind(fragment, model);
-      Should(fragment.childNodes[1].innerText).be.exactly("0");
+      Should(fragment.childNodes[1].textContent).be.exactly("0");
 
       model.items[0].val = "howdy";
-      Should(fragment.childNodes[1].innerText).be.exactly("howdy");
+      Should(fragment.childNodes[1].textContent).be.exactly("howdy");
     });
 
     it("reflects changes to the model into the DOM after unbind/bind", function() {
       var view = rivets.bind(fragment, model);
-      Should(fragment.childNodes[1].innerText).be.exactly("0");
+      Should(fragment.childNodes[1].textContent).be.exactly("0");
 
       view.unbind();
       view.bind();
       model.items[0].val = "howdy";
-      Should(fragment.childNodes[1].innerText).be.exactly("howdy");
+      Should(fragment.childNodes[1].textContent).be.exactly("howdy");
     });
 
     it("lets you push an item", function() {
@@ -97,6 +97,34 @@ describe("Rivets.binders", function() {
       model.items.push({val: 3});
       Should(model.items.length).be.exactly(originalLength + 1);
       Should(fragment.childNodes.length).be.exactly(model.items.length + 1);
+    });
+  });
+
+  describe("nested-each-*", function() {
+    var fragment;
+    var el;
+    var nestedEl;
+    var model;
+
+    beforeEach(function() {
+      fragment = document.createDocumentFragment();
+      el = document.createElement("span");
+      el.setAttribute("rv-each-item", "items");
+      nestedEl = document.createElement("span");
+      nestedEl.setAttribute("rv-each-nested", "item.val");
+      nestedEl.textContent = "{%item%}-{%nested%}";
+      el.appendChild(nestedEl);
+      fragment.appendChild(el);
+
+      model = { items: [{val: [{val: 0},{val: 1}]},{val: [{val: 2},{val: 3}]},{val: [{val: 4},{val: 5}]}] };
+    });
+
+    it("lets you get all the indexes", function() {
+      var view = rivets.bind(el, model);
+
+      Should(fragment.childNodes[1].childNodes[1].textContent).be.exactly('0-0');
+      Should(fragment.childNodes[1].childNodes[2].textContent).be.exactly('0-1');
+      Should(fragment.childNodes[2].childNodes[2].textContent).be.exactly('1-1');
     });
   });
 
@@ -170,6 +198,49 @@ describe("Rivets.binders", function() {
       model.data.show = undefined;
       // 1 for the comment placeholder
       Should(fragment.childNodes.length).be.exactly(1);
+    });
+
+    it("rebindes nested if", function() {
+      var nestedEl = document.createElement("div")
+      nestedEl.setAttribute("rv-if", "data.showNested");
+      nestedEl.innerHTML = "{ data.countNested }";
+      el.appendChild(nestedEl);
+
+      var view = rivets.bind(fragment, model);
+
+      model.data.countNested = "1";
+      model.data.showNested = true;
+      Should(nestedEl.innerHTML).be.exactly("1");
+      model.data.show = false;
+      model.data.show = true;
+      model.data.countNested = "42";
+
+      Should(nestedEl.innerHTML).be.exactly("42");
+    });
+  });
+ 
+  describe("Custom binder with no attribute value", function() {
+    rivets.binders["custom-binder"] = function(el, value) {
+      el.innerHTML = "received " + value;
+    };
+    beforeEach(function() {
+      fragment = document.createDocumentFragment();
+      el = document.createElement("div");
+
+      fragment.appendChild(el);
+
+      model = {};
+    });
+
+    it("receives undefined when html attribute is not specified", function() {
+      el.innerHTML = "<div rv-custom-binder></div>";
+      var view = rivets.bind(fragment, model);
+      Should(el.children[0].innerHTML).be.exactly('received undefined');
+    });
+    it("receives undefined when html attribute is not specified", function() {
+      el.innerHTML = "<div rv-custom-binder=''></div>";
+      var view = rivets.bind(fragment, model);
+      Should(el.children[0].innerHTML).be.exactly('received undefined');
     });
   });
 });
